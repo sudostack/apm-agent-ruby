@@ -49,9 +49,34 @@ module ElasticAPM
     end
 
     def start_transaction(env)
-      ElasticAPM.start_transaction 'Rack', 'request',
-        context: ElasticAPM.build_context(env),
-        trace_context: trace_context(env)
+      if (transaction = ElasticAPM.current_transaction)
+        transaction.name = transaction_name(env)
+        transaction
+      else
+        ElasticAPM.start_transaction(
+          transaction_name(env),
+          'request',
+          context: ElasticAPM.build_context(env),
+          trace_context: trace_context(env)
+        )
+      end
+    end
+
+    def transaction_name(env)
+      request_method = env['REQUEST_METHOD']
+      [request_method, grape_route_name(env)].join(' ')
+    end
+
+    def grape_route_name(env)
+      return origin(env) if origin(env)
+      env['REQUEST_PATH']
+    end
+
+    def origin(env)
+      env['api.endpoint'].respond_to?(:routes) &&
+        env['api.endpoint'].routes.respond_to?(:first) &&
+        env['api.endpoint'].routes.first.respond_to?(:pattern) &&
+        env['api.endpoint'].routes.first.pattern.respond_to?(:origin)
     end
 
     def trace_context(env)
